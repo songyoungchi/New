@@ -124,8 +124,6 @@ jobs:
             -c "iSj > output/sections.json" \
             -c "axj > output/xrefs.json" \
             -c "agj > output/callgraph.json" \
-            -c "pdc @@f > output/disasm_pseudoc.txt" \
-            -c "pdg @@f > output/decompiled_all.c" \
             -c "/ck > output/crypto_constants.txt" \
             -c "tsj > output/structs.json" \
             -c "tej > output/enums.json" \
