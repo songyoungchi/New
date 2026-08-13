@@ -1,12 +1,8 @@
 
 name: Analyze lib.so with radare2 + r2ghidra
-"on":
+on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-    paths:
-      - lib.so
 permissions:
   contents: read
 jobs:
@@ -135,7 +131,7 @@ jobs:
             -c "afcf @@f > output/functions_complexity.txt" \
             -c "Ps myproj" \
             -c "q" \
-            lib.so 2
+            lib.so
           echo "Analysis complete - results are in ./output"
       - name: Upload analysis output
         if: always()
