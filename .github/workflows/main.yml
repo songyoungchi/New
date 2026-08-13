@@ -116,17 +116,17 @@ jobs:
             -c "aeim" \
             -c "aae" \
             -c "aau" \
-            -c "aflj > output/functions.json" \
-            -c "izzzj > output/strings_all.json" \
-            -c "iIj > output/imports.json" \
-            -c "iEJ > output/exports.json" \
-            -c "isj > output/symbols.json" \
-            -c "iSj > output/sections.json" \
-            -c "axj > output/xrefs.json" \
-            -c "agj > output/callgraph.json" \
+            -c "afl > output/functions.txt" \
+            -c "izzz > output/strings_all.txt" \
+            -c "iI > output/imports.txt" \
+            -c "iE > output/exports.txt" \
+            -c "is > output/symbols.txt" \
+            -c "iS > output/sections.txt" \
+            -c "ax > output/xrefs.txt" \
+            -c "ag > output/callgraph.txr" \
             -c "/ck > output/crypto_constants.txt" \
-            -c "tsj > output/structs.json" \
-            -c "tej > output/enums.json" \
+            -c "ts > output/structs.txt" \
+            -c "te > output/enums.txt" \
             -c "afcf @@f > output/functions_complexity.txt" \
             -c "Ps myproj" \
             -c "q" \
