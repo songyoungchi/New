@@ -1,6 +1,5 @@
-
 name: Analyze lib.so with radare2 + r2ghidra
-on:
+"on":
   workflow_dispatch:
   push:
 permissions:
@@ -9,7 +8,6 @@ jobs:
   analyze:
     name: Build radare2 + r2ghidra and analyze lib.so
     runs-on: ubuntu-latest
-    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -90,6 +88,9 @@ jobs:
             echo "::error::lib.so was not found at the repository root - nothing to analyze."
             exit 1
           fi
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git config --global init.defaultBranch main
           r2 -q \
             -e bin.relocs.apply=true \
             -e bin.cache=true \
@@ -131,7 +132,7 @@ jobs:
             -c "afcf @@f > output/functions_complexity.txt" \
             -c "Ps myproj" \
             -c "q" \
-            lib.so
+            lib.so 2
           echo "Analysis complete - results are in ./output"
       - name: Upload analysis output
         if: always()
