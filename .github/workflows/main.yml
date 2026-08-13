@@ -132,7 +132,7 @@ jobs:
             -c "afcf @@f > output/functions_complexity.txt" \
             -c "Ps myproj" \
             -c "q" \
-            lib.so 2
+            lib.so
           echo "Analysis complete - results are in ./output"
       - name: Upload analysis output
         if: always()
