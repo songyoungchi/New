@@ -1,0 +1,147 @@
+
+name: Analyze lib.so with radare2 + r2ghidra
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - lib.so
+permissions:
+  contents: read
+jobs:
+  analyze:
+    name: Build radare2 + r2ghidra and analyze lib.so
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install system build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            echo "apt-get update failed (attempt ${attempt}/3), retrying in 5s..."
+            sleep 5
+          done
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            git \
+            curl \
+            wget \
+            ca-certificates \
+            pkg-config \
+            meson \
+            ninja-build \
+            cmake \
+            patch \
+            python3 \
+            python3-pip \
+            libzip-dev \
+            zlib1g-dev
+      - name: Clone radare2 (latest from GitHub)
+        run: |
+          set -euo pipefail
+          git clone https://github.com/radareorg/radare2.git
+      - name: Build and install radare2
+        working-directory: radare2
+        run: |
+          set -euo pipefail
+          export WITHOUT_PULL=1
+          if ! ./sys/install.sh; then
+            echo "::error::radare2 build/install failed - see the compiler output above for details."
+            exit 1
+          fi
+      - name: Verify radare2 installation
+        run: |
+          set -euo pipefail
+          if ! command -v r2 >/dev/null 2>&1; then
+            echo "::error::r2 was not found on PATH after installation."
+            exit 1
+          fi
+          r2 -v
+      - name: Build and install r2ghidra from source
+        run: |
+          set -euo pipefail
+          echo "Updating the r2pm package index..."
+          if ! r2pm -U; then
+            echo "::error::Failed to update the r2pm package database."
+            exit 1
+          fi
+          echo "Building r2ghidra from source (this can take a while)..."
+          if ! r2pm -ci r2ghidra; then
+            echo "::error::r2ghidra build/install failed - see the build log above for details."
+            exit 1
+          fi
+      - name: Prepare output directory
+        run: |
+          set -euo pipefail
+          mkdir -p ./output
+          if [ ! -d ./output ] || [ ! -w ./output ]; then
+            echo "::error::./output directory is missing or not writable after mkdir -p."
+            exit 1
+          fi
+          echo "Output directory ready: $(realpath ./output)"
+      - name: Run radare2 analysis on lib.so
+        run: |
+          set -euo pipefail
+          if [ ! -f lib.so ]; then
+            echo "::error::lib.so was not found at the repository root - nothing to analyze."
+            exit 1
+          fi
+          r2 -q \
+            -e bin.relocs.apply=true \
+            -e bin.cache=true \
+            -e asm.arch=arm \
+            -e asm.bits=32 \
+            -e dir.projects=./output \
+            -e anal.in=io.maps \
+            -e anal.depth=131072 \
+            -e types.constraint=true \
+            -e anal.datarefs=true \
+            -e anal.refstr=true \
+            -e anal.strings=true \
+            -e anal.jmp.indir=true \
+            -e anal.pushret=true \
+            -e anal.vinfun=true \
+            -e anal.vinfunrange=true \
+            -c "aaaa" \
+            -c "e anal.hasnext=true" \
+            -c "e anal.esil=true" \
+            -c "e anal.emumem=true" \
+            -c "aarr" \
+            -c "aav0" \
+            -c "aeim" \
+            -c "aae" \
+            -c "aau" \
+            -c "aflj > output/functions.json" \
+            -c "izzzj > output/strings_all.json" \
+            -c "iIj > output/imports.json" \
+            -c "iEJ > output/exports.json" \
+            -c "isj > output/symbols.json" \
+            -c "iSj > output/sections.json" \
+            -c "axj > output/xrefs.json" \
+            -c "agj > output/callgraph.json" \
+            -c "pdc @@f > output/disasm_pseudoc.txt" \
+            -c "pdg @@f > output/decompiled_all.c" \
+            -c "/ck > output/crypto_constants.txt" \
+            -c "tsj > output/structs.json" \
+            -c "tej > output/enums.json" \
+            -c "afcf @@f > output/functions_complexity.txt" \
+            -c "Ps myproj" \
+            -c "q" \
+            lib.so 2
+          echo "Analysis complete - results are in ./output"
+      - name: Upload analysis output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: radare2-analysis-output
+          path: output/
+          if-no-files-found: warn
+          retention-days: 14
