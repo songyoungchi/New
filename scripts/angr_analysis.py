@@ -12,7 +12,6 @@ def analyze(binary_path):
 
     proj = angr.Project(binary_path, auto_load_libs=False)
 
-    # ساخت CFG با حل indirect jumps و ارجاعات متقابل
     cfg = proj.analyses.CFGFast(
         normalize=True,
         resolve_indirect_jumps=True,
@@ -33,7 +32,10 @@ def analyze(binary_path):
         for block in func.blocks:
             for ins in block.capstone.insns:
                 if ins.insn.mnemonic in ("bl", "blx"):
-                    target = ins.insn.operands[0].imm if ins.insn.operands[0].type == 1 else None
+                    # تشخیص هدف (مستقیم یا indirect)
+                    target = None
+                    if ins.insn.operands[0].type == 1:  # immediate
+                        target = ins.insn.operands[0].imm
                     if target:
                         func_info["call_sites"].append({
                             "from": hex(ins.address),
@@ -56,34 +58,30 @@ def analyze(binary_path):
         for block in func.blocks:
             for ins in block.capstone.insns:
                 if ins.insn.mnemonic in ("bl", "blx"):
-                    target = ins.insn.operands[0].imm if ins.insn.operands[0].type == 1 else None
+                    target = None
+                    if ins.insn.operands[0].type == 1:
+                        target = ins.insn.operands[0].imm
                     if target and target in cfg.kb.functions:
                         callgraph.add_edge(func.name, cfg.kb.functions[target].name)
-
     nx.write_adjlist(callgraph, os.path.join(output_dir, "callgraph_adjlist.txt"))
     nx.write_gml(callgraph, os.path.join(output_dir, "callgraph.gml"))
 
-    # ---------- رشته‌ها و ارجاعات ----------
+    # ---------- رشته‌ها (ASCII و الگوها) ----------
     strings_found = []
-    # الگوهای مورد جستجو (می‌تونی اضافه کنی)
     patterns = [b"login", b"Something went wrong", b"error", b"failed", b"success", b"key", b"secret"]
     for pattern in patterns:
         addrs = proj.loader.memory.find(pattern)
         for addr in addrs:
-            xrefs = cfg.kb.xrefs.get_xrefs_to(addr)
             strings_found.append({
                 "string": pattern.decode(errors="ignore"),
-                "address": hex(addr),
-                "refs": [{"from": hex(x.ins_addr), "type": str(x.type)} for x in xrefs]
+                "address": hex(addr)
             })
 
-    # علاوه بر الگوها، همه رشته‌های ASCII (حداقل ۴ کاراکتر) را هم استخراج کن
-    # می‌توانی از angr.calling_conventions یا روش دستی استفاده کنی؛ اینجا ساده‌تر
-    mem = proj.loader.memory
+    # استخراج تمام رشته‌های ASCII قابل چاپ (حداقل ۴ کاراکتر)
     min_addr = min(proj.loader.main_object.segments, key=lambda s: s.min_addr).min_addr
     max_addr = max(proj.loader.main_object.segments, key=lambda s: s.max_addr).max_addr
     try:
-        data = mem.load(min_addr, max_addr - min_addr)
+        data = proj.loader.memory.load(min_addr, max_addr - min_addr)
     except Exception:
         data = b''
     if data:
@@ -91,15 +89,12 @@ def analyze(binary_path):
         for match in ascii_re.finditer(data):
             s = match.group().decode()
             addr = min_addr + match.start()
-            xrefs = cfg.kb.xrefs.get_xrefs_to(addr)
-            if xrefs:
-                strings_found.append({
-                    "string": s,
-                    "address": hex(addr),
-                    "refs": [{"from": hex(x.ins_addr), "type": str(x.type)} for x in xrefs]
-                })
+            strings_found.append({
+                "string": s,
+                "address": hex(addr)
+            })
 
-    with open(os.path.join(output_dir, "strings_xrefs.json"), "w") as f:
+    with open(os.path.join(output_dir, "strings.json"), "w") as f:
         json.dump(strings_found, f, indent=2)
 
     print("angr analysis completed. Output saved to '{}'".format(output_dir))
