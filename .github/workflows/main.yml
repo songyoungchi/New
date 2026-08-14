@@ -2,6 +2,10 @@ name: Deep Binary Analysis (Ghidra + angr)
 
 on:
   push:
+    paths:
+      - 'lib.so'
+      - 'scripts/**'
+      - '.github/workflows/deep-analysis.yml'
   workflow_dispatch:
 
 jobs:
@@ -40,8 +44,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install angr
-        run: |
-          pip install angr unicorn
+        run: pip install angr
 
       - name: Run angr Analysis
         run: python scripts/angr_analysis.py lib.so
@@ -51,8 +54,27 @@ jobs:
           name: angr-results
           path: angr_output/
 
+  string-usage:
+    needs: ghidra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghidra-results
+          path: ghidra_output/
+
+      - name: Run String Usage Analysis
+        run: python scripts/find_string_usage.py ghidra_output string_usage_output
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: string-usage-results
+          path: string_usage_output/
+
   merge:
-    needs: [ghidra, angr]
+    needs: [ghidra, angr, string-usage]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
