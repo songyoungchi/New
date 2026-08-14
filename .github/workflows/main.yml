@@ -98,7 +98,7 @@ jobs:
             -e asm.bits=32 \
             -e dir.projects=./output \
             -e anal.in=io.maps \
-            -e anal.depth=131072 \
+            -e anal.depth=65536 \
             -e types.constraint=true \
             -e anal.datarefs=true \
             -e anal.refstr=true \
