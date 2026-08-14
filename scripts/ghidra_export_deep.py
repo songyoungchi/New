@@ -81,9 +81,16 @@ for func in functions:
             "data_type": str(var.getDataType())
         })
 
+    # ---------- Function boundaries ----------
+    body = func.getBody()
+    start_addr = str(body.getMinAddress())
+    end_addr = str(body.getMaxAddress())
+
     functions_data.append({
         "name": name,
         "address": str(entry),
+        "start": start_addr,
+        "end": end_addr,
         "c_file": os.path.join(name, name + ".c"),
         "pcode_file": os.path.join(name, name + "_pcode.json"),
         "refs_to": refs_to,
