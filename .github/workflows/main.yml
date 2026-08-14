@@ -40,7 +40,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install angr
-        run: pip install angr
+        run: |
+          pip install angr unicorn
 
       - name: Run angr Analysis
         run: python scripts/angr_analysis.py lib.so
