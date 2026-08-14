@@ -2,15 +2,31 @@
 import json
 import sys
 import os
+import re
 
 def parse_addr(s):
-    return int(s, 16)
+    """Extract hex address from string if possible; return None if not."""
+    # If string contains '::', take part after last '::'
+    if '::' in s:
+        s = s.split('::')[-1]
+    # Remove any non-hex characters (like leading underscores)
+    s = re.sub(r'[^0-9a-fA-F]', '', s)
+    if not s:
+        return None
+    try:
+        return int(s, 16)
+    except ValueError:
+        return None
 
 def find_function_by_addr(functions, addr_str):
     addr_int = parse_addr(addr_str)
+    if addr_int is None:
+        return None
     for f in functions:
         start = parse_addr(f["start"])
         end = parse_addr(f["end"])
+        if start is None or end is None:
+            continue
         if start <= addr_int <= end:
             return f
     return None
@@ -57,14 +73,15 @@ def analyze(ghidra_dir, output_dir="string_usage_output"):
                 "type": ref.get("type", ""),
                 "function": func["name"] if func else None
             }
-            entry["refs"].append(ref_info)
+            # اگر آدرس معتبر نیست و تابعی پیدا نشد، فقط اگر آدرس قابل تجزیه باشه اضافه می‌کنیم
+            # در غیر این صورت می‌توانیم ردش کنیم
+            if func is not None or parse_addr(ref_addr) is not None:
+                entry["refs"].append(ref_info)
         result.append(entry)
 
-    # ذخیره خروجی کامل
     with open(os.path.join(output_dir, "string_usage.json"), "w") as f:
         json.dump(result, f, indent=2)
 
-    # اگر آدرس خاصی خواسته شد، درخت تماس آن را هم بساز
     target_addr = os.environ.get("TARGET_ADDR")
     if target_addr:
         func = find_function_by_addr(functions, target_addr)
