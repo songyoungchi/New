@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# بقیه کد مثل قبله...
 # ghidra_export_deep.py
 from ghidra.app.decompiler import DecompInterface
 from ghidra.util.task import ConsoleTaskMonitor
