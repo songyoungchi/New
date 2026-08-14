@@ -108,9 +108,14 @@ for data in data_iterator:
         value = data.getValue()
         refs = []
         for ref in ref_manager.getReferencesTo(addr):
+            from_addr = ref.getFromAddress()
+            # پیدا کردن دقیق تابع با استفاده از getFunctionContaining
+            containing_func = func_manager.getFunctionContaining(from_addr)
+            func_name = containing_func.getName() if containing_func else None
             refs.append({
-                "from": str(ref.getFromAddress()),
-                "type": str(ref.getReferenceType())
+                "from": str(from_addr),
+                "type": str(ref.getReferenceType()),
+                "function": func_name
             })
         strings_data.append({
             "string": value,
