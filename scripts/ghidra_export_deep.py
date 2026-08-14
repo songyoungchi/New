@@ -1,15 +1,21 @@
 # -*- coding: utf-8 -*-
-# بقیه کد مثل قبله...
-# ghidra_export_deep.py
 from ghidra.app.decompiler import DecompInterface
 from ghidra.util.task import ConsoleTaskMonitor
 from ghidra.program.model.listing import Function
 from ghidra.program.model.symbol import Reference
 import json
 import os
+import errno
+
+def make_dir(path):
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
 
 output_dir = "ghidra_output"
-os.makedirs(output_dir, exist_ok=True)
+make_dir(output_dir)
 
 program = getCurrentProgram()
 listing = program.getListing()
@@ -27,9 +33,9 @@ for func in functions:
     name = func.getName()
     entry = func.getEntryPoint()
     func_output_dir = os.path.join(output_dir, name)
-    os.makedirs(func_output_dir, exist_ok=True)
+    make_dir(func_output_dir)
 
-    # دیکامپایل
+    # ---------- Decompilation ----------
     decomp_res = decomp.decompileFunction(func, 60, monitor)
     c_code = ""
     if decomp_res is not None and decomp_res.decompileCompleted():
@@ -37,7 +43,7 @@ for func in functions:
         with open(os.path.join(func_output_dir, name + ".c"), "w") as f:
             f.write(c_code)
 
-    # Pcode
+    # ---------- Pcode ----------
     pcode_ops = []
     instructions = listing.getInstructions(func.getBody(), True)
     for ins in instructions:
@@ -51,7 +57,7 @@ for func in functions:
     with open(os.path.join(func_output_dir, name + "_pcode.json"), "w") as f:
         json.dump(pcode_ops, f, indent=2)
 
-    # Xrefs
+    # ---------- Xrefs ----------
     refs_to = []
     refs_from = []
     for ref in ref_manager.getReferencesTo(entry):
@@ -65,7 +71,7 @@ for func in functions:
             "type": str(ref.getReferenceType())
         })
 
-    # Stack Variables
+    # ---------- Stack Variables ----------
     stack_vars = []
     for var in func.getStackFrame().getStackVariables():
         stack_vars.append({
@@ -86,7 +92,7 @@ for func in functions:
         "signature": str(func.getSignature())
     })
 
-# استخراج رشته‌ها و ارجاعات
+# ---------- Strings and Xrefs ----------
 strings_data = []
 data_iterator = listing.getDefinedData(True)
 for data in data_iterator:
@@ -108,7 +114,7 @@ for data in data_iterator:
 with open(os.path.join(output_dir, "strings_xrefs.json"), "w") as f:
     json.dump(strings_data, f, indent=2)
 
-# Callgraph
+# ---------- Callgraph ----------
 callgraph = {}
 for func in func_manager.getFunctions(True):
     func_name = func.getName()
@@ -128,7 +134,7 @@ for func in func_manager.getFunctions(True):
 with open(os.path.join(output_dir, "callgraph.json"), "w") as f:
     json.dump(callgraph, f, indent=2)
 
-# خلاصه همه توابع
+# ---------- Summary ----------
 with open(os.path.join(output_dir, "functions_deep.json"), "w") as f:
     json.dump(functions_data, f, indent=2)
 
