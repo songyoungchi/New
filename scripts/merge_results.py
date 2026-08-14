@@ -12,18 +12,17 @@ def merge(artifacts_dir):
     ghidra_path = os.path.join(artifacts_dir, "ghidra-results")
     angr_path = os.path.join(artifacts_dir, "angr-results")
 
+    # Ghidra
     if os.path.exists(ghidra_path):
         for fname in ["functions_deep.json", "strings_xrefs.json", "callgraph.json"]:
             fpath = os.path.join(ghidra_path, fname)
             if os.path.exists(fpath):
                 with open(fpath) as f:
                     merged["ghidra"][fname] = json.load(f)
-        # کپی کردن پوشه‌های توابع (اختیاری)
-        functions_dir = os.path.join(ghidra_path)
-        # فقط فایل‌های JSON را می‌گیریم
 
+    # angr
     if os.path.exists(angr_path):
-        for fname in ["functions.json", "strings_xrefs.json"]:
+        for fname in ["functions.json", "strings.json"]:  # <-- تغییر نام
             fpath = os.path.join(angr_path, fname)
             if os.path.exists(fpath):
                 with open(fpath) as f:
