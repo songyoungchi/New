@@ -8,23 +8,20 @@ import networkx as nx
 
 def get_xrefs_to(xrefs, addr):
     """
-    استخراج ارجاعات به یک آدرس مشخص.
-    سازگار با هر دو نوع ساختار xrefs در angr:
-      - networkx DiGraph (نسخه‌های جدید)
-      - XRefManager (نسخه‌های قدیمی)
+    استخراج ارجاعات به یک آدرس.
+    سازگار با networkx graph و XRefManager قدیمی.
     """
     refs = []
     addr_int = addr if isinstance(addr, int) else int(addr, 16)
 
-    # اگر xrefs یک گراف networkx باشد
     if hasattr(xrefs, 'in_edges'):
+        # angr جدید: گراف networkx
         for src, dst, data in xrefs.in_edges(addr_int, data=True):
             refs.append({
                 "from": hex(src),
                 "type": str(data.get("type", "unknown"))
             })
     else:
-        # روش قدیمی
         try:
             for x in xrefs.get_xrefs_to(addr_int):
                 refs.append({
@@ -32,7 +29,6 @@ def get_xrefs_to(xrefs, addr):
                     "type": str(x.type)
                 })
         except AttributeError:
-            # در صورت نبود متد
             pass
     return refs
 
@@ -42,7 +38,6 @@ def analyze(binary_path):
 
     proj = angr.Project(binary_path, auto_load_libs=False)
 
-    # ---------- ساخت CFG ----------
     print("[*] Building CFG...")
     cfg = proj.analyses.CFGFast(
         normalize=True,
@@ -65,7 +60,6 @@ def analyze(binary_path):
         for block in func.blocks:
             for ins in block.capstone.insns:
                 if ins.insn.mnemonic in ("bl", "blx"):
-                    # تشخیص هدف: immediate یا indirect
                     target = None
                     if ins.insn.operands[0].type == 1:  # immediate
                         target = ins.insn.operands[0].imm
@@ -101,7 +95,7 @@ def analyze(binary_path):
 
     nx.write_adjlist(callgraph, os.path.join(output_dir, "callgraph_adjlist.txt"))
     nx.write_gml(callgraph, os.path.join(output_dir, "callgraph.gml"))
-    print("[+] callgraph saved (adjlist + gml)")
+    print("[+] callgraph saved")
 
     # ---------- رشته‌ها ----------
     print("[*] Extracting strings and xrefs...")
@@ -110,7 +104,8 @@ def analyze(binary_path):
     # الگوهای مورد جستجو
     patterns = [
         b"login", b"Something went wrong", b"error", b"failed",
-        b"success", b"key", b"secret", b"password", b"username"
+        b"success", b"key", b"secret", b"password", b"username",
+        b"internet", b"network", b"http", b"https"
     ]
     for pattern in patterns:
         addrs = proj.loader.memory.find(pattern)
@@ -122,8 +117,7 @@ def analyze(binary_path):
                 "refs": xrefs
             })
 
-    # استخراج تمام رشته‌های ASCII قابل چاپ (حداقل ۴ کاراکتر)
-    # فقط از بخش‌های خواندنی/اجرایی نه کل فایل
+    # استخراج تمام رشته‌های ASCII (حداقل ۴ کاراکتر)
     min_addr = None
     max_addr = None
     try:
@@ -143,7 +137,7 @@ def analyze(binary_path):
             for match in ascii_re.finditer(data):
                 s = match.group().decode()
                 addr = min_addr + match.start()
-                # فقط اگر قبلاً اضافه نشده باشد
+                # جلوگیری از تکرار
                 if not any(x["address"] == hex(addr) for x in strings_found):
                     xrefs = get_xrefs_to(cfg.kb.xrefs, addr)
                     strings_found.append({
