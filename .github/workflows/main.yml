@@ -1,11 +1,7 @@
-name: Deep Binary Analysis (Ghidra + angr)
+name: Deep Binary Analysis
 
 on:
   push:
-    paths:
-      - 'lib.so'
-      - 'scripts/**'
-      - '.github/workflows/deep-analysis.yml'
   workflow_dispatch:
 
 jobs:
@@ -67,6 +63,8 @@ jobs:
 
       - name: Run String Usage Analysis
         run: python scripts/find_string_usage.py ghidra_output string_usage_output
+        env:
+          TARGET_ADDR: "004cdc46"   # آدرس رشته مشکوک را می‌توانی تغییر دهی
 
       - uses: actions/upload-artifact@v4
         with:
