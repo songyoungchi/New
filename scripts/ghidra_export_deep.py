@@ -16,36 +16,38 @@ def make_dir(path):
             raise
 
 def int_to_le_bytes(value, n=4):
-    """تبدیل عدد به آرایه بایتی little-endian"""
+    """تبدیل عدد به آرایه بایتی little-endian با طول n بایت"""
     b = []
     for i in range(n):
         b.append((value >> (8 * i)) & 0xff)
     return b
 
-def find_pattern_in_memory(memory, pattern):
-    """جستجوی الگوی بایتی در تمام حافظه و برگرداندن آدرس‌ها"""
+def find_pattern_in_memory(program, pattern, align_mask=None):
+    """جستجوی الگوی بایتی با استفاده از findBytes (سریع‌تر)"""
+    memory = program.getMemory()
     results = []
+    # تبدیل pattern به رشته‌ی بایتی
+    pattern_bytes = bytes(pattern)
+    # جستجو در همه بلاک‌ها
     for block in memory.getBlocks():
         start = block.getStart()
         end = block.getEnd()
-        data = []
-        addr = start
         try:
-            while addr.compareTo(end) <= 0:
-                data.append(memory.getByte(addr) & 0xff)
-                addr = addr.add(1)
-        except MemoryAccessException:
-            continue
-        # جستجوی ساده
-        for i in range(len(data) - len(pattern) + 1):
-            match = True
-            for j in range(len(pattern)):
-                if data[i + j] != pattern[j]:
-                    match = False
+            # استفاده از findBytes در Ghidra
+            found = memory.findBytes(start, end, pattern_bytes, None, True, monitor)
+            while found is not None:
+                addr = found
+                # اگر align_mask داده شده، بیت‌های موردنظر را ماسک کن
+                if align_mask is not None:
+                    addr = addr.getNewAddress(addr.getOffset() & ~align_mask)
+                results.append(addr)
+                # جستجوی بعدی
+                next_start = found.add(1)
+                if next_start.compareTo(end) > 0:
                     break
-            if match:
-                ptr_addr = start.add(i)
-                results.append(ptr_addr)
+                found = memory.findBytes(next_start, end, pattern_bytes, None, True, monitor)
+        except Exception as e:
+            continue
     return results
 
 def dump_disassembly(listing, addr, before=5, after=5):
@@ -165,21 +167,22 @@ strings_xrefs = []
 strings_deep = []
 
 data_iterator = listing.getDefinedData(True)
+ptr_size = program.getDefaultPointerSize()  # اندازه اشاره‌گر (معمولاً 4 برای ARM32)
+
 for data in data_iterator:
     if not data.hasStringValue():
         continue
 
     str_addr = data.getAddress()
-    str_value = data.getValue()
-    if str_value is None:
-        str_value = ""
-    str_value = str(str_value)
+    str_value = str(data.getValue()) if data.getValue() else ""
 
     # ۱) ارجاعات مستقیم
     direct_refs = []
     for ref in ref_manager.getReferencesTo(str_addr):
         from_addr = ref.getFromAddress()
-        func = func_manager.getFunctionContaining(from_addr)
+        # برای Thumb بیت ۰ را حذف کن
+        normalized_addr = from_addr.getNewAddress(from_addr.getOffset() & ~1)
+        func = func_manager.getFunctionContaining(normalized_addr)
         func_name = func.getName() if func else None
         direct_refs.append({
             "from": str(from_addr),
@@ -188,14 +191,20 @@ for data in data_iterator:
             "disassembly": dump_disassembly(listing, from_addr, 5, 5)
         })
 
-    # ۲) ارجاعات اشاره‌گر (Little-Endian 4 بایتی)
-    ptr_locations = find_pattern_in_memory(memory, int_to_le_bytes(str_addr.getOffset(), 4))
+    # ۲) ارجاعات اشاره‌گر (Little-Endian با اندازه ptr_size)
+    ptr_locations = find_pattern_in_memory(
+        program,
+        int_to_le_bytes(str_addr.getOffset(), ptr_size),
+        align_mask=1  # نادیده گرفتن بیت ۰ برای Thumb
+    )
     pointer_refs = []
     for ptr_addr in ptr_locations:
+        # نرمال‌سازی آدرس اشاره‌گر
+        normalized_ptr = ptr_addr.getNewAddress(ptr_addr.getOffset() & ~1)
         # xrefs به خود مکان اشاره‌گر
         for ref in ref_manager.getReferencesTo(ptr_addr):
             from_addr = ref.getFromAddress()
-            func = func_manager.getFunctionContaining(from_addr)
+            func = func_manager.getFunctionContaining(from_addr.getNewAddress(from_addr.getOffset() & ~1))
             func_name = func.getName() if func else None
             pointer_refs.append({
                 "pointer_addr": str(ptr_addr),
@@ -204,8 +213,8 @@ for data in data_iterator:
                 "function": func_name,
                 "disassembly": dump_disassembly(listing, from_addr, 5, 5)
             })
-        # اگر xref نبود، خود آدرس اشاره‌گر و دیس‌اسمبل اطرافش را ذخیره کن
         if not pointer_refs:
+            # اگر xref نبود، فقط دیس‌اسمبل اطراف اشاره‌گر را بده
             pointer_refs.append({
                 "pointer_addr": str(ptr_addr),
                 "from": None,
@@ -214,7 +223,6 @@ for data in data_iterator:
                 "disassembly": dump_disassembly(listing, ptr_addr, 5, 5)
             })
 
-    # ذخیره در فایل‌های نهایی
     strings_xrefs.append({
         "string": str_value,
         "address": str(str_addr),
