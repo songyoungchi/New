@@ -1,7 +1,6 @@
 name: Deep Binary Analysis
 
 on:
-  push:
   workflow_dispatch:
 
 jobs:
