@@ -31,7 +31,6 @@ jobs:
           ./ghidra/ghidra_*/support/analyzeHeadless ghidra_project MyProject \
             -import lib.so \
             -processor ARM:LE:32:v7 \
-            -cspec gcc \
             -scriptPath scripts \
             -postScript ghidra_export_deep.py \
             -deleteProject
