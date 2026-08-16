@@ -5,17 +5,14 @@ import os
 import sys
 import re
 import networkx as nx
+from capstone import CS_GRP_CALL
 
 def get_xrefs_to(xrefs, addr):
-    """
-    استخراج ارجاعات به یک آدرس.
-    سازگار با networkx graph و XRefManager قدیمی.
-    """
+    """استخراج ارجاعات به یک آدرس"""
     refs = []
     addr_int = addr if isinstance(addr, int) else int(addr, 16)
 
     if hasattr(xrefs, 'in_edges'):
-        # angr جدید: گراف networkx
         for src, dst, data in xrefs.in_edges(addr_int, data=True):
             refs.append({
                 "from": hex(src),
@@ -32,6 +29,10 @@ def get_xrefs_to(xrefs, addr):
             pass
     return refs
 
+def is_call_insn(ins):
+    """تشخیص دستور CALL با استفاده از گروه Capstone"""
+    return CS_GRP_CALL in ins.insn.groups
+
 def analyze(binary_path):
     output_dir = "angr_output"
     os.makedirs(output_dir, exist_ok=True)
@@ -44,7 +45,7 @@ def analyze(binary_path):
         resolve_indirect_jumps=True,
         data_references=True,
         cross_references=True,
-        force_complete_scan=False
+        force_complete_scan=False,
     )
 
     # ---------- اطلاعات توابع ----------
@@ -59,14 +60,17 @@ def analyze(binary_path):
         }
         for block in func.blocks:
             for ins in block.capstone.insns:
-                if ins.insn.mnemonic in ("bl", "blx"):
+                if is_call_insn(ins):
                     target = None
-                    if ins.insn.operands[0].type == 1:  # immediate
+                    # اگر آدرس مقصد فوری باشد
+                    if ins.insn.operands and ins.insn.operands[0].type == 1:
                         target = ins.insn.operands[0].imm
                     if target:
+                        # نرمال‌سازی بیت Thumb
+                        target_thumb = target & ~1
                         func_info["call_sites"].append({
                             "from": hex(ins.address),
-                            "to": hex(target) if target in cfg.kb.functions else "external"
+                            "to": hex(target_thumb) if target_thumb in cfg.kb.functions else "external"
                         })
                     else:
                         func_info["call_sites"].append({
@@ -86,12 +90,14 @@ def analyze(binary_path):
         callgraph.add_node(func.name)
         for block in func.blocks:
             for ins in block.capstone.insns:
-                if ins.insn.mnemonic in ("bl", "blx"):
+                if is_call_insn(ins):
                     target = None
-                    if ins.insn.operands[0].type == 1:
+                    if ins.insn.operands and ins.insn.operands[0].type == 1:
                         target = ins.insn.operands[0].imm
-                    if target and target in cfg.kb.functions:
-                        callgraph.add_edge(func.name, cfg.kb.functions[target].name)
+                    if target:
+                        target_thumb = target & ~1
+                        if target_thumb in cfg.kb.functions:
+                            callgraph.add_edge(func.name, cfg.kb.functions[target_thumb].name)
 
     nx.write_adjlist(callgraph, os.path.join(output_dir, "callgraph_adjlist.txt"))
     nx.write_gml(callgraph, os.path.join(output_dir, "callgraph.gml"))
@@ -101,7 +107,6 @@ def analyze(binary_path):
     print("[*] Extracting strings and xrefs...")
     strings_found = []
 
-    # الگوهای مورد جستجو
     patterns = [
         b"login", b"Something went wrong", b"error", b"failed",
         b"success", b"key", b"secret", b"password", b"username",
@@ -137,7 +142,6 @@ def analyze(binary_path):
             for match in ascii_re.finditer(data):
                 s = match.group().decode()
                 addr = min_addr + match.start()
-                # جلوگیری از تکرار
                 if not any(x["address"] == hex(addr) for x in strings_found):
                     xrefs = get_xrefs_to(cfg.kb.xrefs, addr)
                     strings_found.append({
